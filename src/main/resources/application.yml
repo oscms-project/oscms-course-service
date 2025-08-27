@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: course-service # <--- 修改
+  profiles:
+    active: dev
