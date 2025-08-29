@@ -31,16 +31,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // 允许访问健康检查和监控端点
-                        .requestMatchers("/actuator/**").permitAll()
-                        // 允许访问Swagger文档
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        // 课程管理接口需要认证
-                        .requestMatchers("/courses/**").authenticated()
-                        // 班级管理接口需要认证
-                        .requestMatchers("/classes/**").authenticated()
-                        // 其他所有请求都需要认证
-                        .anyRequest().authenticated())
+                        // 允许访问所有端点 - 测试模式
+                        .anyRequest().permitAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
