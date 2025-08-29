@@ -5,9 +5,11 @@ import com.osc.oscms.common.dto.clazz.ClassCreateDto;
 import com.osc.oscms.common.dto.clazz.ClassDto;
 import com.osc.oscms.common.dto.clazz.StudentImportDto;
 import com.osc.oscms.common.dto.clazz.TAImportDto;
+import com.osc.oscms.common.dto.clazz.StudentAssignmentSummaryDto;
 
 import com.osc.oscms.common.dto.common.ImportResultDto;
 import com.osc.oscms.common.dto.user.UserResponse;
+import com.osc.oscms.common.dto.material.MaterialDto;
 
 import com.osc.oscms.courseservice.service.ClassService;
 import com.osc.oscms.courseservice.security.SecurityUtils;
@@ -117,11 +119,32 @@ public class ClassController {
 
     @PostMapping("/{classId}/enroll")
     @Operation(summary = "学生加入班级", description = "当前登录学生报名加入指定班级")
-    public ApiResponse<Void> enrollInClass(@PathVariable Long classId, @RequestParam String studentId) {
-        // TODO: 临时注释认证检查，用于测试
-        // String currentStudentId = SecurityUtils.getCurrentUserId();
-        classService.enrollStudentInClass(classId, studentId);
+    public ApiResponse<Void> enrollInClass(@PathVariable Long classId) {
+        String currentStudentId = SecurityUtils.getCurrentUserId();
+        if (currentStudentId == null) {
+            throw new RuntimeException("用户未登录");
+        }
+        if (!SecurityUtils.isStudent()) {
+            throw new RuntimeException("只有学生可以加入班级");
+        }
+        classService.enrollStudentInClass(classId, currentStudentId);
         return ApiResponse.ok();
+    }
+
+    @GetMapping("/{classId}/resources")
+    @Operation(summary = "获取班级资料列表", description = "获取指定班级可见的所有资料")
+    public ApiResponse<List<MaterialDto>> getClassResources(@PathVariable Long classId) {
+        List<MaterialDto> materials = classService.getClassMaterials(classId);
+        return ApiResponse.ok(materials);
+    }
+
+    @GetMapping("/{classId}/students/{studentId}/assignment-summary")
+    @Operation(summary = "获取学生作业完成摘要", description = "获取指定学生在特定班级中的作业完成情况摘要")
+    public ApiResponse<StudentAssignmentSummaryDto> getStudentAssignmentSummary(
+            @PathVariable Long classId,
+            @PathVariable String studentId) {
+        StudentAssignmentSummaryDto summary = classService.getStudentAssignmentSummary(classId, studentId);
+        return ApiResponse.ok(summary);
     }
 
 }

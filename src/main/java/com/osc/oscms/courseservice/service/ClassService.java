@@ -4,9 +4,12 @@ import com.osc.oscms.common.dto.clazz.ClassCreateDto;
 import com.osc.oscms.common.dto.clazz.ClassDto;
 import com.osc.oscms.common.dto.clazz.StudentImportDto;
 import com.osc.oscms.common.dto.clazz.TAImportDto;
+import com.osc.oscms.common.dto.clazz.StudentClassInfoDto;
+import com.osc.oscms.common.dto.clazz.StudentAssignmentSummaryDto;
 
 import com.osc.oscms.common.dto.common.ImportResultDto;
 import com.osc.oscms.common.dto.user.UserResponse;
+import com.osc.oscms.common.dto.material.MaterialDto;
 
 import java.util.List;
 
@@ -119,5 +122,25 @@ public interface ClassService {
      * 学生加入班级
      */
     void enrollStudentInClass(Long classId, String studentId);
+
+    /**
+     * 获取学生在某课程中的班级信息
+     */
+    ClassDto getStudentClassInCourse(String studentId, Long courseId);
+
+    /**
+     * 获取学生加入的所有班级信息
+     */
+    List<StudentClassInfoDto> getStudentEnrolledClassInfo(String studentId);
+
+    /**
+     * 获取班级可见的资料列表
+     */
+    List<MaterialDto> getClassMaterials(Long classId);
+
+    /**
+     * 获取学生在班级中的作业完成摘要
+     */
+    StudentAssignmentSummaryDto getStudentAssignmentSummary(Long classId, String studentId);
 
 }

@@ -64,4 +64,9 @@ public interface CourseService {
      * 重新开启课程
      */
     void reopenCourse(Long courseId, String teacherId);
+
+    /**
+     * 获取学生参与的所有课程
+     */
+    List<CourseDto> getStudentCourses(String studentId);
 }

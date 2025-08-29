@@ -7,19 +7,18 @@ import com.osc.oscms.common.dto.course.CourseCreateDto;
 import com.osc.oscms.common.dto.course.CourseDto;
 import com.osc.oscms.courseservice.repository.CourseRepository;
 import com.osc.oscms.courseservice.repository.ChapterRepository;
+import com.osc.oscms.courseservice.repository.ClassRepository;
+import com.osc.oscms.courseservice.repository.ClassStudentRepository;
 import com.osc.oscms.courseservice.service.CourseService;
-import com.osc.oscms.common.exception.BusinessException;
 import com.osc.oscms.common.exception.CourseException.CourseCodeAlreadyExistsException;
 import com.osc.oscms.common.exception.CourseException.CourseNotFoundException;
 import com.osc.oscms.common.dto.course.ChapterCreateDto;
-import com.osc.oscms.courseservice.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,6 +32,8 @@ public class CourseServiceImpl implements CourseService {
 
     private final CourseRepository courseRepository;
     private final ChapterRepository chapterRepository;
+    private final ClassRepository classRepository;
+    private final ClassStudentRepository classStudentRepository;
 
     @Override
     @Transactional
@@ -276,6 +277,38 @@ public class CourseServiceImpl implements CourseService {
         // 创建新章节
         if (!chapterDtos.isEmpty()) {
             createChapters(courseId, chapterDtos);
+        }
+    }
+
+    @Override
+    public List<CourseDto> getStudentCourses(String studentId) {
+        log.info("Getting courses for student: {}", studentId);
+
+        try {
+            // 1. 获取学生所在的所有班级ID
+            List<Long> classIds = classStudentRepository.getClassIdsByStudentId(studentId);
+
+            if (classIds.isEmpty()) {
+                return List.of();
+            }
+
+            // 2. 获取这些班级对应的课程ID
+            List<Long> courseIds = classRepository.getCourseIdsByClassIds(classIds);
+
+            if (courseIds.isEmpty()) {
+                return List.of();
+            }
+
+            // 3. 获取课程详情
+            List<Course> courses = courseRepository.selectBatchIds(courseIds);
+
+            return courses.stream()
+                    .map(this::convertToDto)
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.error("Error getting courses for student {}: {}", studentId, e.getMessage());
+            throw new RuntimeException("获取学生课程信息失败", e);
         }
     }
 }

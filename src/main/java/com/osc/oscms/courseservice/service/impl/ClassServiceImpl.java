@@ -7,15 +7,23 @@ import com.osc.oscms.common.dto.clazz.ClassCreateDto;
 import com.osc.oscms.common.dto.clazz.ClassDto;
 import com.osc.oscms.common.dto.clazz.StudentImportDto;
 import com.osc.oscms.common.dto.clazz.TAImportDto;
+import com.osc.oscms.common.dto.clazz.StudentClassInfoDto;
+import com.osc.oscms.common.dto.clazz.StudentAssignmentSummaryDto;
 
 import com.osc.oscms.common.dto.common.ImportResultDto;
 import com.osc.oscms.common.dto.user.UserResponse;
+import com.osc.oscms.common.dto.material.MaterialDto;
+import com.osc.oscms.common.dto.assignment.AssignmentDto;
+import com.osc.oscms.common.dto.submission.SubmissionDto;
 
 import com.osc.oscms.courseservice.repository.ClassRepository;
 import com.osc.oscms.courseservice.repository.ClassStudentRepository;
 import com.osc.oscms.courseservice.repository.ClassTARepository;
+import com.osc.oscms.courseservice.repository.CourseRepository;
 import com.osc.oscms.courseservice.service.ClassService;
 import com.osc.oscms.courseservice.client.UserServiceClient;
+import com.osc.oscms.courseservice.client.MaterialServiceClient;
+import com.osc.oscms.courseservice.client.AssessmentServiceClient;
 
 import com.osc.oscms.common.exception.ClassException.ClazzNotFoundException;
 import com.osc.oscms.common.exception.ClassException.DuplicateStudentInClassException;
@@ -42,7 +50,10 @@ public class ClassServiceImpl implements ClassService {
     private final ClassRepository classRepository;
     private final ClassStudentRepository classStudentRepository;
     private final ClassTARepository classTARepository;
+    private final CourseRepository courseRepository;
     private final UserServiceClient userServiceClient;
+    private final MaterialServiceClient materialServiceClient;
+    private final AssessmentServiceClient assessmentServiceClient;
 
     @Override
     @Transactional
@@ -409,6 +420,64 @@ public class ClassServiceImpl implements ClassService {
         classStudentRepository.insert(classStudent);
     }
 
+    @Override
+    public ClassDto getStudentClassInCourse(String studentId, Long courseId) {
+        log.info("Getting class for student {} in course {}", studentId, courseId);
+
+        // 获取学生在该课程中的班级
+        List<ClassDto> studentClasses = getClassesByStudentId(studentId);
+
+        return studentClasses.stream()
+                .filter(classDto -> classDto.getCourseId().equals(courseId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Override
+    public List<StudentClassInfoDto> getStudentEnrolledClassInfo(String studentId) {
+        log.info("Getting enrolled class info for student: {}", studentId);
+
+        try {
+            // 获取学生所在的所有班级
+            List<ClassDto> enrolledClasses = getClassesByStudentId(studentId);
+
+            return enrolledClasses.stream()
+                    .map(this::convertToStudentClassInfo)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error getting enrolled class info for student {}: {}", studentId, e.getMessage());
+            throw new RuntimeException("获取学生班级信息失败", e);
+        }
+    }
+
+    private StudentClassInfoDto convertToStudentClassInfo(ClassDto classDto) {
+        StudentClassInfoDto studentClassInfo = new StudentClassInfoDto();
+
+        // 手动设置字段以确保映射正确
+        studentClassInfo.setClassId(classDto.getId());
+        studentClassInfo.setClassName(classDto.getName());
+
+        // 获取课程信息
+        try {
+            ClassEntity classEntity = classRepository.selectById(classDto.getId());
+            if (classEntity != null && classEntity.getCourseId() != null) {
+                studentClassInfo.setCourseId(classEntity.getCourseId());
+
+                // 获取课程名称
+                var course = courseRepository.selectById(classEntity.getCourseId());
+                if (course != null) {
+                    studentClassInfo.setCourseName(course.getName());
+                } else {
+                    studentClassInfo.setCourseName("Course " + classEntity.getCourseId()); // 临时设置
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get course info for class {}: {}", classDto.getId(), e.getMessage());
+        }
+
+        return studentClassInfo;
+    }
+
     /**
      * 创建模拟用户响应对象 (用于服务调用失败时的降级)
      */
@@ -419,5 +488,100 @@ public class ClassServiceImpl implements ClassService {
         user.setRole("ROLE_STUDENT");
         user.setEmail(userId + "@example.com");
         return user;
+    }
+
+    @Override
+    public List<MaterialDto> getClassMaterials(Long classId) {
+        log.info("Getting materials for class: {}", classId);
+
+        // 首先验证班级存在
+        ClassEntity classEntity = classRepository.selectById(classId);
+        if (classEntity == null) {
+            throw new ClazzNotFoundException("班级不存在: " + classId);
+        }
+
+        try {
+            // 通过 MaterialServiceClient 获取班级可见的资料
+            var response = materialServiceClient.getClassMaterials(classEntity.getCourseId(), classId);
+            if (response.getCode() == 200 && response.getData() != null) {
+                log.info("Successfully retrieved {} materials for class {} in course {}",
+                        response.getData().size(), classId, classEntity.getCourseId());
+                return response.getData();
+            } else {
+                log.warn("Failed to get materials for class {}: {}", classId, response.getMessage());
+                return List.of();
+            }
+        } catch (Exception e) {
+            log.error("Error calling material service for class {}: {}", classId, e.getMessage());
+            // 返回空列表而不是抛出异常，保证服务的稳定性
+            return List.of();
+        }
+    }
+
+    @Override
+    public StudentAssignmentSummaryDto getStudentAssignmentSummary(Long classId, String studentId) {
+        log.info("Getting assignment summary for student {} in class {}", studentId, classId);
+
+        // 验证班级存在并获取班级信息
+        ClassEntity classEntity = getClassByIdOrThrow(classId);
+
+        // 获取课程信息
+        var course = courseRepository.selectById(classEntity.getCourseId());
+        if (course == null) {
+            throw new RuntimeException("Course not found with id: " + classEntity.getCourseId());
+        }
+
+        StudentAssignmentSummaryDto summary = new StudentAssignmentSummaryDto();
+        summary.setClassId(classId);
+        summary.setStudentId(studentId);
+        summary.setCourseName(course.getName());
+
+        try {
+            // 获取班级的所有作业
+            var assignmentsResponse = assessmentServiceClient.getClassAssignments(classId);
+            List<AssignmentDto> assignments = assignmentsResponse.getData();
+
+            if (assignments == null || assignments.isEmpty()) {
+                // 没有作业的情况
+                summary.setTotalAssignments(0);
+                summary.setCompletedAssignments(0);
+                summary.setPendingAssignments(0);
+                return summary;
+            }
+
+            summary.setTotalAssignments(assignments.size());
+
+            // 统计已完成的作业数量
+            int completedCount = 0;
+            for (AssignmentDto assignment : assignments) {
+                try {
+                    // 获取学生在这个作业的提交记录
+                    var submissionsResponse = assessmentServiceClient.getAssignmentSubmissions(
+                            assignment.getId(), studentId);
+                    List<SubmissionDto> submissions = submissionsResponse.getData();
+
+                    // 如果有提交记录，则认为已完成
+                    if (submissions != null && !submissions.isEmpty()) {
+                        completedCount++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to get submissions for assignment {} and student {}: {}",
+                            assignment.getId(), studentId, e.getMessage());
+                }
+            }
+
+            summary.setCompletedAssignments(completedCount);
+            summary.setPendingAssignments(assignments.size() - completedCount);
+
+        } catch (Exception e) {
+            log.error("Error getting assignment summary for student {} in class {}: {}",
+                    studentId, classId, e.getMessage());
+            // 返回默认值而不是抛出异常
+            summary.setTotalAssignments(0);
+            summary.setCompletedAssignments(0);
+            summary.setPendingAssignments(0);
+        }
+
+        return summary;
     }
 }
