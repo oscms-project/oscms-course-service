@@ -15,6 +15,7 @@ import com.osc.oscms.courseservice.repository.ClassRepository;
 import com.osc.oscms.courseservice.repository.ClassStudentRepository;
 import com.osc.oscms.courseservice.repository.ClassTARepository;
 import com.osc.oscms.courseservice.service.ClassService;
+import com.osc.oscms.courseservice.client.UserServiceClient;
 
 import com.osc.oscms.common.exception.ClassException.ClazzNotFoundException;
 import com.osc.oscms.common.exception.ClassException.DuplicateStudentInClassException;
@@ -41,6 +42,7 @@ public class ClassServiceImpl implements ClassService {
     private final ClassRepository classRepository;
     private final ClassStudentRepository classStudentRepository;
     private final ClassTARepository classTARepository;
+    private final UserServiceClient userServiceClient;
 
     @Override
     @Transactional
@@ -293,12 +295,21 @@ public class ClassServiceImpl implements ClassService {
         // 验证班级存在
         getClassByIdOrThrow(classId);
 
-        // TODO: 调用用户服务获取学生详细信息
-        // 暂时返回空列表，需要集成用户服务后完善
+        // 调用用户服务获取学生详细信息
         List<String> studentIds = classStudentRepository.findStudentIdsByClassId(classId);
-        return studentIds.stream()
-                .map(this::createMockUserResponse)
-                .collect(Collectors.toList());
+        if (studentIds.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            return userServiceClient.getUsersByIds(studentIds).getData();
+        } catch (Exception e) {
+            log.error("Error getting student details from user service: {}", e.getMessage());
+            // 如果用户服务调用失败，返回基础信息
+            return studentIds.stream()
+                    .map(this::createMockUserResponse)
+                    .collect(Collectors.toList());
+        }
     }
 
     @Override
@@ -334,12 +345,21 @@ public class ClassServiceImpl implements ClassService {
         // 验证班级存在
         getClassByIdOrThrow(classId);
 
-        // TODO: 调用用户服务获取助教详细信息
-        // 暂时返回空列表，需要集成用户服务后完善
+        // 调用用户服务获取助教详细信息
         List<String> taIds = classTARepository.findTaIdsByClassId(classId);
-        return taIds.stream()
-                .map(this::createMockUserResponse)
-                .collect(Collectors.toList());
+        if (taIds.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            return userServiceClient.getUsersByIds(taIds).getData();
+        } catch (Exception e) {
+            log.error("Error getting TA details from user service: {}", e.getMessage());
+            // 如果用户服务调用失败，返回基础信息
+            return taIds.stream()
+                    .map(this::createMockUserResponse)
+                    .collect(Collectors.toList());
+        }
     }
 
     @Override
@@ -390,8 +410,7 @@ public class ClassServiceImpl implements ClassService {
     }
 
     /**
-     * 创建模拟用户响应对象
-     * TODO: 替换为实际的用户服务调用
+     * 创建模拟用户响应对象 (用于服务调用失败时的降级)
      */
     private UserResponse createMockUserResponse(String userId) {
         UserResponse user = new UserResponse();
