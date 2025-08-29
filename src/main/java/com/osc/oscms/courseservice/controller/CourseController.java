@@ -1,9 +1,13 @@
 package com.osc.oscms.courseservice.controller;
 
 import com.osc.oscms.common.response.ApiResponse;
-import com.osc.oscms.courseservice.dto.CourseCreateDto;
-import com.osc.oscms.courseservice.dto.CourseDto;
+import com.osc.oscms.common.dto.course.CourseCreateDto;
+import com.osc.oscms.common.dto.course.CourseDto;
+import com.osc.oscms.common.dto.clazz.ClassDto;
+import com.osc.oscms.common.exception.UnauthorizedException;
 import com.osc.oscms.courseservice.service.CourseService;
+import com.osc.oscms.courseservice.service.ClassService;
+import com.osc.oscms.courseservice.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -24,11 +28,20 @@ import java.util.List;
 public class CourseController {
 
     private final CourseService courseService;
+    private final ClassService classService;
 
     @PostMapping
-    @Operation(summary = "创建课程", description = "创建新的课程")
-    public ApiResponse<CourseDto> createCourse(@Valid @RequestBody CourseCreateDto courseCreateDto) {
-        CourseDto result = courseService.createCourse(courseCreateDto);
+    @Operation(summary = "创建课程", description = "教师创建新课程")
+    public ApiResponse<CourseDto> createCourse(
+            @RequestParam String teacherId,
+            @Valid @RequestBody CourseCreateDto courseCreateDto) {
+        // 验证当前用户是否是教师且与请求中的teacherId一致
+        String currentUserId = SecurityUtils.getCurrentUserId();
+        if (!SecurityUtils.isTeacher() || !teacherId.equals(currentUserId)) {
+            throw new RuntimeException("只有教师本人可以创建课程");
+        }
+
+        CourseDto result = courseService.createCourse(teacherId, courseCreateDto);
         return ApiResponse.ok(result);
     }
 
@@ -56,15 +69,14 @@ public class CourseController {
     }
 
     @GetMapping
-    @Operation(summary = "获取所有课程", description = "获取所有课程列表")
-    public ApiResponse<List<CourseDto>> getAllCourses() {
-        List<CourseDto> courses = courseService.getAllCourses();
-        return ApiResponse.ok(courses);
-    }
+    @Operation(summary = "获取教师的所有课程", description = "列出指定教师的所有课程")
+    public ApiResponse<List<CourseDto>> listCoursesByTeacher(@RequestParam String teacherId) {
+        // 验证当前用户是否是教师且与请求中的teacherId一致
+        String currentUserId = SecurityUtils.getCurrentUserId();
+        if (!SecurityUtils.isTeacher() || !teacherId.equals(currentUserId)) {
+            throw new RuntimeException("只有教师本人可以查看自己的课程");
+        }
 
-    @GetMapping("/teacher/{teacherId}")
-    @Operation(summary = "获取教师课程", description = "根据教师ID获取该教师的所有课程")
-    public ApiResponse<List<CourseDto>> getCoursesByTeacher(@PathVariable String teacherId) {
         List<CourseDto> courses = courseService.getCoursesByTeacherId(teacherId);
         return ApiResponse.ok(courses);
     }
@@ -92,15 +104,40 @@ public class CourseController {
 
     @PostMapping("/{courseId}/complete")
     @Operation(summary = "标记课程完成", description = "将课程标记为已完成")
-    public ApiResponse<Void> markCourseAsCompleted(@PathVariable Long courseId) {
-        courseService.markCourseAsCompleted(courseId);
+    public ApiResponse<Void> completeCourse(
+            @PathVariable Long courseId,
+            @RequestParam String teacherId) {
+
+        // 验证权限：只有课程的教师可以标记完成
+        String currentUserId = SecurityUtils.getCurrentUserId();
+        if (!teacherId.equals(currentUserId)) {
+            throw new UnauthorizedException("只有课程教师可以标记课程完成");
+        }
+
+        courseService.completeCourse(courseId, teacherId);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{courseId}/reopen")
-    @Operation(summary = "重新开启课程", description = "重新开启已完成的课程")
-    public ApiResponse<Void> reopenCourse(@PathVariable Long courseId) {
-        courseService.reopenCourse(courseId);
+    @Operation(summary = "重新开启课程", description = "将已完成的课程重新开启")
+    public ApiResponse<Void> reopenCourse(
+            @PathVariable Long courseId,
+            @RequestParam String teacherId) {
+
+        // 验证权限：只有课程的教师可以重新开启
+        String currentUserId = SecurityUtils.getCurrentUserId();
+        if (!teacherId.equals(currentUserId)) {
+            throw new UnauthorizedException("只有课程教师可以重新开启课程");
+        }
+
+        courseService.reopenCourse(courseId, teacherId);
         return ApiResponse.ok();
+    }
+
+    @GetMapping("/{courseId}/classes")
+    @Operation(summary = "获取课程下的所有班级", description = "获取指定课程下的所有班级列表")
+    public ApiResponse<List<ClassDto>> getCourseClasses(@PathVariable Long courseId) {
+        List<ClassDto> classes = classService.getClassesByCourseId(courseId);
+        return ApiResponse.ok(classes);
     }
 }
