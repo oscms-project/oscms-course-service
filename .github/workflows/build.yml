@@ -1,0 +1,20 @@
+# 这个配置使用统一的可重用工作流
+# 复制自 oscms-deployment/examples/course-service-workflow.yml
+
+name: Build Course Service
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    uses: oscms-project/oscms-deployment/.github/workflows/reusable-microservice-build.yml@main
+    with:
+      service-name: oscms-course-service
+      service-port: "8082"
+      needs-common: true
+      dockerfile-path: "./Dockerfile"
+    secrets: inherit
