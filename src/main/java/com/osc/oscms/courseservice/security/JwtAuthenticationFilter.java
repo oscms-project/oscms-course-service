@@ -1,6 +1,7 @@
 package com.osc.oscms.courseservice.security;
 
 import com.osc.oscms.common.util.JwtUtil;
+import com.osc.oscms.common.util.JwtTokenHolder;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,6 +51,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     // 设置到Security上下文
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
+                    // 将JWT token存储到ThreadLocal中，供Feign调用时使用
+                    JwtTokenHolder.setCurrentToken(jwt);
+
                     log.debug("Set authentication for user: {}, roles: {}", userId, roles);
                 }
             }
@@ -58,6 +62,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+
+        // 在请求完成后清理ThreadLocal，避免内存泄漏
+        JwtTokenHolder.clear();
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

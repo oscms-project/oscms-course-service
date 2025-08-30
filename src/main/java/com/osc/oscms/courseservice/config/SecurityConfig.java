@@ -27,8 +27,10 @@ public class SecurityConfig {
                 // CORS 在 API Gateway 层处理
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // 允许访问所有端点 - 测试模式
-                        .anyRequest().permitAll())
+                        // 允许访问健康检查和API文档
+                        .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/doc.html").permitAll()
+                        // 其他所有请求需要认证
+                        .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
