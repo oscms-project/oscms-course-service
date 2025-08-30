@@ -93,12 +93,6 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
-# JWT Configuration for K8s
-jwt:
-  secret: ${JWT_SECRET:YourSuperSecretKeyForJWTGenerationWhichIsVeryLongAndSecure12345!}
-  expiration:
-    ms: ${JWT_EXPIRATION_MS:3600000}
-
 # Logging
 logging:
   level:
